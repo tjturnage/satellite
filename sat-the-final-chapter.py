@@ -95,6 +95,74 @@ def latlon_from_radar(az,elevation,num_gates):
     lat,lon,back=g.fwd(center_lon,center_lat,az2D,rng2D)
     return lat,lon,back
 
+def figure_timestamp(dt):
+    """
+    Creates user-friendly time strings from Unix Epoch Time:
+    https://en.wikipedia.org/wiki/Unix_time
+    
+    Parameters
+    ----------
+    dt : datetime object
+        
+    Returns
+    -------
+    fig_title_timestring    : 'DD Mon YYYY  -  HH:MM:SS UTC'  
+    fig_filename_timestring : 'YYYYMMDD-HHMMSS'
+                    
+    """    
+    #newt = datetime.fromtimestamp(t, timezone.utc)
+    fig_title_timestring = datetime.strftime(dt, "%d %b %Y  -  %H:%M:%S %Z")
+    fig_filename_timestring = datetime.strftime(dt, "%Y%m%d-%H%M%S")
+    return fig_title_timestring,fig_filename_timestring
+
+def ltg_plot(highlow,ltg):
+    """
+    Plots lightning
+    
+    Parameters
+    ----------
+    highlow : string to say whether we're plotting low or high
+        ltg : pandas dataframe containing strike data
+        
+    Returns
+    -------
+    Nothing, just makes a scatterplot
+                    
+    """    
+    for st in range(0,len(ltg)):
+        lat = ltg.latitude.values[st]
+        lon = ltg.longitude.values[st]
+        cur = ltg.peakcurrent[st]
+        hgt = ltg.icheight[st]    
+        size_add = 0
+        if hgt == 0:
+            col = 'r'
+            size_add = 10
+            zord = 10
+        elif hgt < 10000:
+            col = 'm'
+            size_add = 5
+            zord = 5
+        elif hgt < 15000:
+            col = 'c'
+            zord = 3            
+        elif hgt < 20000:
+            col = 'b'
+            zord = 2 
+        else:
+            col = 'g'
+            zord = 1 
+        if cur > 0:
+            symb = '+'
+        else:
+            symb = '_'
+        size = 10 + size_add
+        if highlow == 'low' and hgt == 0:    
+            a.scatter(lon,lat,s=size,marker=symb,c=col,zorder=zord)
+        elif highlow == 'high' and hgt > 0:
+            a.scatter(lon,lat,s=size,marker=symb,c=col,zorder=zord)
+    return
+
 import numpy as np
 from pyproj import Proj
 import xarray as xr
@@ -122,22 +190,23 @@ ltg_D = []
 radsat_D = []
 
 
+# lightning files obtained from EarthNetworks
 ltg_files = os.listdir(ltg_dir)
 ltg_csv = os.path.join(ltg_dir,ltg_files[0])
-ltg_D = pd.read_csv(ltg_csv, sep=',', delimiter=None, header='infer',index_col=1,usecols=[0,1,2,3,5],skip_blank_lines=True)
+ltg_D = pd.read_csv(ltg_csv, index_col=['time'])
+ltg_D.index = [datetime.strptime(x[:-2], '%Y-%m-%dT%H:%M:%S.%f') for x in ltg_D.index]
+
+# Here is a step where we decide to bin plots by time
+idx = pd.date_range('2019-06-01 22:15', periods=45, freq='1Min')
+dt = idx[1] - idx[0]
 
 met_info = []
-
-#f = open('metfiles', 'w')
-#f.write('time,datatype,filename\n')
 
 radar_files = os.listdir(radar_stage_dir)
 for r in (radar_files):
     rad_info = str.split(r,'_')
     rad_time_str = rad_info[0]
     rad_datetime = datetime.strptime(rad_time_str,"%Y%m%d-%H%M%S")
-    #rad_pd_time = datetime.strftime(rad_datetime,"%Y-%m-%dT%H:%M:%S")
-    #pd_datetime = pd.to_datetime(rad_pd_time)
     info = [rad_datetime,'r',os.path.join(radar_stage_dir,r)]
     met_info.append(info)
 
@@ -145,16 +214,17 @@ for r in (radar_files):
 satellite_files = os.listdir(sat_source_dir)
 for s in (satellite_files):
     sat_split = str.split(s,'_')
+    dtype = sat_split[1][:3]
+    if dtype == 'GLM':
+        g16_dtype = 'g'
+    else:
+        g16_dtype = 's'        
     sat_time_s = sat_split[3]
     sat_time = sat_time_s[1:-1]
     sat_datetime = datetime.strptime(sat_time, "%Y%j%H%M%S")
-    info = [sat_datetime,'s',os.path.join(sat_source_dir,s)]
+    info = [sat_datetime,g16_dtype,os.path.join(sat_source_dir,s)]
     met_info.append(info)
 
-
-print(met_info)   
-
-idx = pd.date_range('2019-06-01 22:15', periods=22, freq='2.5Min')
 
 np_met_info = np.array(met_info)
 
@@ -163,24 +233,23 @@ metdat_D.columns = ['data_type', 'file_path']
 
 raddat = metdat_D[metdat_D.data_type == 'r']
 satdat = metdat_D[metdat_D.data_type == 's']
+glmdat = metdat_D[metdat_D.data_type == 'g']
 
 file_sequence = []
 for i in range(0,len(idx)):
     new_datetime = idx[i]
-    #print(new_datetime)
+    fig_title,fig_fname_tstr = figure_timestamp(new_datetime)
     new_sat = satdat[satdat.index < new_datetime][-1:]
     sat_path = new_sat.file_path.max()
 
     new_rad = raddat[raddat.index < new_datetime][-1:]
-    #print(new_rad)
     rad_path = new_rad.file_path.max()
-    print(rad_path)
 
-    
-    #new_ltg = ltg_D[ltg_D.index < new_datetime][-1:]
-    new_seq = [sat_path,rad_path]
+    new_glm = glmdat[glmdat.index < new_datetime][-1:]
+    glm_path = new_glm.file_path.max()
+
+    new_seq = [sat_path,rad_path,fig_title,fig_fname_tstr,new_datetime,glm_path]
     file_sequence.append(new_seq)
-
 
 base_gis_dir = 'C:/data/GIS'
 
@@ -202,18 +271,19 @@ ir4_cmap=make_cmap(ir4_colors, position=ir4_position,bit=True)
 plt.register_cmap(cmap=ir4_cmap)
 
 
-
-#sat_base = 'C:/data/20190601/satellite/raw'
-#radar_file = 'C:/data/20190601/KGRR/stage/20190601-222645_Refl_00.50.netcdf'
-#fname = 'OR_ABI-L2-MCMIPC-M6_G16_s20191522231416_e20191522234189_c20191522234306.nc'
-#FILE = os.path.join(sat_base,fname)
-#FILE = 'C:/data/satellite/test2/OR_ABI-L2-MCMIPC-M6_G16_s20191660016501_e20191660019273_c20191660019397.nc'
-i = 1
-last_radar_file = None
-last_FILE = None
 for fn in range(0,len(file_sequence)):
     FILE = file_sequence[fn][0]
     radar_file = file_sequence[fn][1]
+    fig_tstr = file_sequence[fn][2]
+    fig_fname_tstr = file_sequence[fn][3]
+    new_datetime = file_sequence[fn][4]
+    GLM = file_sequence[fn][5]
+    try:
+        G = xr.open_dataset(GLM)
+    except:
+        pass
+    condition = (ltg_D.index > (idx[fn] - dt)) & (ltg_D.index <= idx[fn])
+    ltg = ltg_D[condition]
     C = xr.open_dataset(FILE)
     data = xr.open_dataset(radar_file)
     degrees_tilt = data.Elevation
@@ -229,12 +299,12 @@ for fn in range(0,len(file_sequence)):
     
     C02 = C['CMI_C02'].data
     C02 = np.power(C02, 1/gamma)
-    C03 = C['CMI_C03'].data
-    C03 = np.power(C03, 1/gamma)
+    #C03 = C['CMI_C03'].data
+    #C03 = np.power(C03, 1/gamma)
     
-    C08 = C['CMI_C08'].data - 273.15
-    C09 = C['CMI_C09'].data - 273.15
-    C10 = C['CMI_C10'].data - 273.15
+    #C08 = C['CMI_C08'].data - 273.15
+    #C09 = C['CMI_C09'].data - 273.15
+    #C10 = C['CMI_C10'].data - 273.15
     C13 = C['CMI_C13'].data - 273.15
 
     plts = {}
@@ -247,6 +317,7 @@ for fn in range(0,len(file_sequence)):
     plts['Ref'] = {'cmap':ref_cmap,'vmn':-30,'vmx':80,'title':'Reflectivity','cbticks':[0,15,30,50,60],'cblabel':'dBZ'}
     
     test = ['C02','Ref','C13', 'C08','C09','C10']
+    test = ['C02','Ref','C13', 'GLM','ltg_low','ltg_high']
     #test = ['C08','C13']
 
     # Satellite longitude
@@ -268,15 +339,19 @@ for fn in range(0,len(file_sequence)):
     # Perform cartographic transformation. That is, convert image projection coordinates (x and y)
     # to latitude and longitude values.
     fig, axes = plt.subplots(2,3,figsize=(11,7),subplot_kw={'projection': ccrs.PlateCarree()})
+    plt.suptitle(fig_tstr)
+    font = {'weight' : 'normal', 'size'   : 12}
+    plt.titlesize : 20
+
     XX, YY = np.meshgrid(x, y)
     lons, lats = p(XX, YY, inverse=True)
 
     arDict = {}
     arDict['C02'] = {'ar': C02, 'lat':lats, 'lon':lons}
-    arDict['C03'] = {'ar': C03, 'lat':lats, 'lon':lons}
-    arDict['C08'] = {'ar': C08, 'lat':lats, 'lon':lons}
-    arDict['C09'] = {'ar': C09, 'lat':lats, 'lon':lons}
-    arDict['C10'] = {'ar': C10, 'lat':lats, 'lon':lons}
+    #arDict['C03'] = {'ar': C03, 'lat':lats, 'lon':lons}
+    #arDict['C08'] = {'ar': C08, 'lat':lats, 'lon':lons}
+    #arDict['C09'] = {'ar': C09, 'lat':lats, 'lon':lons}
+    #arDict['C10'] = {'ar': C10, 'lat':lats, 'lon':lons}
     arDict['C13'] = {'ar': C13, 'lat':lats, 'lon':lons}
     arDict['Ref'] = {'ar': ra_filled, 'lat':rlats, 'lon':rlons}
     
@@ -285,31 +360,36 @@ for fn in range(0,len(file_sequence)):
     for y,a in zip(test,axes.ravel()):
         a.set_extent(extent, crs=ccrs.PlateCarree())
         a.set_aspect(1.25)
-        lon = arDict[y]['lon']
-        lat = arDict[y]['lat']
-        arr = arDict[y]['ar']
+        if str(y) != 'ltg_low' and str(y) != 'ltg_high' and str(y) != 'GLM':
+            lon = arDict[y]['lon']
+            lat = arDict[y]['lat']
+            arr = arDict[y]['ar']
         a.add_feature(COUNTIES_ST, facecolor='none', edgecolor='gray')
+
         if str(y) == 'Ref':
             cs = a.pcolormesh(lat,lon,arr,cmap=plts[y]['cmap'],vmin=plts[y]['vmn'], vmax=plts[y]['vmx'])
+
+        elif str(y) == 'ltg_low':
+            if len(ltg) > 0:
+                ltg_plot('low',ltg)
+            else:
+                pass
+
+        elif str(y) == 'ltg_high':
+            if len(ltg) > 0:
+                ltg_plot('high',ltg)
+
+        elif str(y) == 'GLM':
+            try:
+                a.scatter(G['flash_lon'], G['flash_lat'], marker='_')
+            except:
+                pass
         else:
             a.pcolormesh(lon,lat,arr,cmap=plts[y]['cmap'],vmin=plts[y]['vmn'],vmax=plts[y]['vmx'])
 
-    image_dst_path = os.path.join(sat_stage_dir,str(i) + '.png')
+    image_dst_path = os.path.join(sat_stage_dir,fig_fname_tstr + '.png')
     plt.savefig(image_dst_path,format='png')
-    i = i + 1
-    #print(mosaic_fname[:-4] + ' mosaic complete!')    
+
     plt.show()
     plt.close()
-    last_FILE = FILE
-    last_radar_file = radar_file
-"""
-fig2, axes2 = plt.subplots(2,1,figsize=(11,7),sharex='none',subplot_kw={'projection': ccrs.PlateCarree()})
-for z,d in zip(test,axes2.ravel()):
-    d.set_extent(extent, crs=ccrs.PlateCarree())
-    d.set_aspect(1.25)
-    d.add_feature(COUNTIES_ST, facecolor='none', edgecolor='black')
-    d.pcolormesh(rlons,rlats,ref_arr, cmap=ref_cmap,vmin=-30,vmax=80)
 
-
-plt.show()
-"""
