@@ -3,117 +3,9 @@
 Created on Sat Jun 15 10:21:20 2019
 
 @author: tjtur
+
 """
-def make_cmap(colors, position=None, bit=False):
-    """
-    Creates colormaps (cmaps) for different products.
-    
-    Information on cmap with matplotlib
-    https://matplotlib.org/3.1.0/tutorials/colors/colormap-manipulation.html
-    
-    Parameters
-    ----------
-       colors : list of tuples containing RGB values. Tuples must be either:
-                - arithmetic (zero to one) - ex. (0.5, 1, 0.75)
-                - 8-bit                    - ex. (127,256,192)
-     position : ordered list of floats
-                None: default, returns cmap with equally spaced colors
-                If a list is provided, it must have:
-                  - 0 at the beginning and 1 at the end
-                  - values in ascending order
-                  - a number of elements equal to the number of tuples in colors
-          bit : boolean         
-                False : default, assumes arithmetic tuple format
-                True  : set to this if using 8-bit tuple format
-    Returns
-    -------
-         cmap
-                    
-    """  
-    import numpy as np
-    bit_rgb = np.linspace(0,1,256)
-    if position == None:
-        position = np.linspace(0,1,len(colors))
-    else:
-        if len(position) != len(colors):
-            sys.exit("position length must be the same as colors")
-        elif position[0] != 0 or position[-1] != 1:
-            sys.exit("position must start with 0 and end with 1")
-    if bit:
-        for i in range(len(colors)):
-            colors[i] = (bit_rgb[colors[i][0]],
-                         bit_rgb[colors[i][1]],
-                         bit_rgb[colors[i][2]])
-    cdict = {'red':[], 'green':[], 'blue':[]}
-    for pos, color in zip(position, colors):
-        cdict['red'].append((pos, color[0], color[0]))
-        cdict['green'].append((pos, color[1], color[1]))
-        cdict['blue'].append((pos, color[2], color[2]))
 
-    cmap = mpl.colors.LinearSegmentedColormap('my_colormap',cdict,256)
-    return cmap
-
-def latlon_from_radar(az,elevation,num_gates):
-    """
-    Convert radar bin radial coordinates to lat/lon coordinates.
-    Adapted from Brian Blaylock code
-    
-    Parameters
-    ----------
-          az : numpy array
-               All the radials for that particular product and elevation
-               Changes from 720 radials for super-res product cuts to 360 radials
-   elevation : float
-               The radar elevation slice in degrees. Needed to calculate range 
-               gate length (gate_len) as projected on the ground using simple
-               trigonometry. This is a very crude approximation that doesn't
-               factor for terrain, earth's curvature, or standard beam refraction.
-   num_gates : integer
-               The number of gates in a radial, which varies with 
-               elevation and radar product. That is why each product makes 
-               an individual call to this function. 
-                    
-    Returns
-    -------
-         lat : array like
-         lon : array like
-        back : I have no idea what this is for. I don't use it.
-                    
-    """
-    rng = None
-    factor = math.cos(math.radians(elevation))
-    if num_gates <= 334:
-        gate_len = 1000.0 * factor
-    else:
-        gate_len = 250.0 * factor
-    rng = np.arange(2125.0,(num_gates*gate_len + 2125.0),gate_len)
-    g = Geod(ellps='clrk66')
-    center_lat = np.ones([len(az),len(rng)])*dnew2.Latitude
-    center_lon = np.ones([len(az),len(rng)])*dnew2.Longitude
-    az2D = np.ones_like(center_lat)*az[:,None]
-    rng2D = np.ones_like(center_lat)*np.transpose(rng[:,None])
-    lat,lon,back=g.fwd(center_lon,center_lat,az2D,rng2D)
-    return lat,lon,back
-
-def figure_timestamp(dt):
-    """
-    Creates user-friendly time strings from Unix Epoch Time:
-    https://en.wikipedia.org/wiki/Unix_time
-    
-    Parameters
-    ----------
-    dt : datetime object
-        
-    Returns
-    -------
-    fig_title_timestring    : 'DD Mon YYYY  -  HH:MM:SS UTC'  
-    fig_filename_timestring : 'YYYYMMDD-HHMMSS'
-                    
-    """    
-    #newt = datetime.fromtimestamp(t, timezone.utc)
-    fig_title_timestring = datetime.strftime(dt, "%d %b %Y  -  %H:%M:%S %Z")
-    fig_filename_timestring = datetime.strftime(dt, "%Y%m%d-%H%M%S")
-    return fig_title_timestring,fig_filename_timestring
 
 def ltg_plot(highlow,ltg):
     """
@@ -166,27 +58,26 @@ def ltg_plot(highlow,ltg):
             a.set_title('EN Intracloud')
     return
 
+import sys
+sys.path.append('C:/data/scripts/resources')
+from my_functions import get_shapefile, latlon_from_radar, figure_timestamp
+from custom_cmaps import wv_cmap, ref_cmap, ir_cmap
+from case_data import this_case
+
 import numpy as np
 from pyproj import Proj
 import xarray as xr
 import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-import cartopy.io.shapereader as shpreader
 import matplotlib.pyplot as plt
-import matplotlib as mpl
-#from metpy.plots import colortables
-from custom_cmaps import wv_cmap, ref_cmap
-import sys
 import os
-import math
-from pyproj import Geod
 import pandas as pd
 from datetime import datetime
-#import matplotlib.pyplot as plt
 
 base_dir = 'C:/data'
-event_date = '20190601'
-rda = 'KGRR'
+event_date = this_case['date']
+rda = this_case['rda']
+extent = this_case['sat_extent']
+#extent = [-86.4,-84.3,41.7,43.2]
 
 case_dir = os.path.join(base_dir,event_date)
 radar_dir = os.path.join(case_dir,rda,'netcdf/ReflectivityQC/00.50')
@@ -255,7 +146,8 @@ for i in range(0,len(idx)):
     new_datetime = idx[i]
     #making progressively larger time slices
     time_slice = (metdat_D.index < new_datetime)
-    fig_title,fig_fname_tstr = figure_timestamp(new_datetime)
+    py_dt = new_datetime.to_pydatetime()
+    fig_title,fig_fname_tstr = figure_timestamp(py_dt)
 
     # the [-1:] slice grabs the latest (last) file to use for plotting
     new_sat = metdat_D[time_slice & just_sat][-1:]
@@ -273,24 +165,11 @@ for i in range(0,len(idx)):
     new_seq = [new_datetime,sat_path,rad_path,glm_path,fig_title,fig_fname_tstr]
     file_sequence.append(new_seq)
 
+
+
 base_gis_dir = 'C:/data/GIS'
-
-for ST in ['MI']:
-    st = ST.lower()
-    counties_dir = 'counties_' + st
-    county_reader = 'county_' + st
-    counties_shape = 'counties_' + ST + '.shp'
-    COUNTIES_ST = 'COUNTIES_' + ST
-    counties_shape_path = os.path.join(base_gis_dir,counties_dir,counties_shape)
-    county_reader = counties_shape_path
-    reader = shpreader.Reader(counties_shape_path)
-    counties = list(reader.geometries())
-    COUNTIES_ST = cfeature.ShapelyFeature(counties, ccrs.PlateCarree())
-
-ir4_colors = [(0,0,0),(255,255,255),(0,0,0), (255,0,0), (255,255,0), (0,255,0), (0,0,255), (191,0,255), (255,255,255),(0,0,0),(120,120,120),(0,0,0)]
-ir4_position = [0, 10/166, 35/166, 45/166, 55/166, 65/166, 82/166, 90/166, 95/166, 135.9/166, 136/166, 1]
-ir4_cmap=make_cmap(ir4_colors, position=ir4_position,bit=True)
-plt.register_cmap(cmap=ir4_cmap)
+shape_path = os.path.join(base_gis_dir,'counties_mi','counties_MI.shp')
+COUNTIES_ST = get_shapefile(shape_path)
 
 
 for fn in range(0,len(file_sequence)):
@@ -313,11 +192,8 @@ for fn in range(0,len(file_sequence)):
 
     # process radar file
     data = xr.open_dataset(radar_file)
-    degrees_tilt = data.Elevation
-    dnew2 = data.sortby('Azimuth')
-    azimuths = dnew2.Azimuth.values
-    num_gates = len(dnew2.Gate)
-    rlats,rlons,rback=latlon_from_radar(azimuths,degrees_tilt,num_gates)
+    dnew2,rlats,rlons,back=latlon_from_radar(data)
+
     da = dnew2.ReflectivityQC
     ref_arr = da.to_masked_array(copy=True)
     ra_filled = ref_arr.filled()
@@ -342,7 +218,7 @@ for fn in range(0,len(file_sequence)):
     plts['C08'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 8 W/V'}
     plts['C09'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 9 W/V'}
     plts['C10'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 10 W/V'}
-    plts['C13'] = {'cmap':ir4_cmap,'vmn':-110.0,'vmx':56.0,'title':'Channel 13 IR'}
+    plts['C13'] = {'cmap':ir_cmap,'vmn':-110.0,'vmx':56.0,'title':'Channel 13 IR'}
     plts['Ref'] = {'cmap':ref_cmap,'vmn':-30,'vmx':80,'title':'Reflectivity','cbticks':[0,15,30,50,60],'cblabel':'dBZ'}
     
     test = ['C02','Ref','C13', 'C08','C09','C10']
@@ -389,7 +265,7 @@ for fn in range(0,len(file_sequence)):
     # Don't need to reproject radar data - already got lon/lats from 'latlon_from_radar' function
     arDict['Ref'] = {'ar': ra_filled, 'lat':rlats, 'lon':rlons}
     
-    extent = [-86.4,-84.3,41.7,43.2]
+
 
     for y,a in zip(test,axes.ravel()):
         a.set_extent(extent, crs=ccrs.PlateCarree())
