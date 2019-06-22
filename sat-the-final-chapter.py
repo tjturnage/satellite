@@ -6,7 +6,6 @@ Created on Sat Jun 15 10:21:20 2019
 
 """
 
-
 def ltg_plot(highlow,ltg):
     """
     Plots lightning and assigns +/ based on polarity and color codes based
@@ -60,8 +59,9 @@ def ltg_plot(highlow,ltg):
 
 import sys
 sys.path.append('C:/data/scripts/resources')
-from my_functions import get_shapefile, latlon_from_radar, figure_timestamp
-from custom_cmaps import wv_cmap, ref_cmap, ir_cmap
+from my_functions import latlon_from_radar, figure_timestamp
+from custom_cmaps import plts
+from gis_layers import shape_mini
 from case_data import this_case
 
 import numpy as np
@@ -77,13 +77,15 @@ base_dir = 'C:/data'
 event_date = this_case['date']
 rda = this_case['rda']
 extent = this_case['sat_extent']
-#extent = [-86.4,-84.3,41.7,43.2]
+shapelist = this_case['shapelist']
+
 
 case_dir = os.path.join(base_dir,event_date)
 radar_dir = os.path.join(case_dir,rda,'netcdf/ReflectivityQC/00.50')
 sat_dir = os.path.join(case_dir,'satellite/raw')
 ltg_dir = os.path.join(case_dir,'lightning')
 image_dir = os.path.join(case_dir,'images')
+base_gis_dir = 'C:/data/GIS'
 
 
 ltg_D = []
@@ -115,7 +117,6 @@ for r in (radar_files):
     #info = [rad_datetime,'r',os.path.join(radar_stage_dir,r)]
     info = [rad_datetime,'r',os.path.join(radar_dir,r)]
     met_info.append(info)
-
 
 satellite_files = os.listdir(sat_dir)
 for s in (satellite_files):
@@ -166,12 +167,6 @@ for i in range(0,len(idx)):
     file_sequence.append(new_seq)
 
 
-
-base_gis_dir = 'C:/data/GIS'
-shape_path = os.path.join(base_gis_dir,'counties_mi','counties_MI.shp')
-COUNTIES_ST = get_shapefile(shape_path)
-
-
 for fn in range(0,len(file_sequence)):
     new_datetime = file_sequence[fn][0]
     sat_file = file_sequence[fn][1]
@@ -212,14 +207,14 @@ for fn in range(0,len(file_sequence)):
     #C10 = C['CMI_C10'].data - 273.15
     C13 = C['CMI_C13'].data - 273.15
 
-    plts = {}
-    plts['C02'] = {'cmap':'Greys_r','vmn':0.0,'vmx':1.0,'title':'Channel 2 Visible'}
-    plts['C03'] = {'cmap':'Greys_r','vmn':0.0,'vmx':1.0,'title':'Channel 3 Near IR'}
-    plts['C08'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 8 W/V'}
-    plts['C09'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 9 W/V'}
-    plts['C10'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 10 W/V'}
-    plts['C13'] = {'cmap':ir_cmap,'vmn':-110.0,'vmx':56.0,'title':'Channel 13 IR'}
-    plts['Ref'] = {'cmap':ref_cmap,'vmn':-30,'vmx':80,'title':'Reflectivity','cbticks':[0,15,30,50,60],'cblabel':'dBZ'}
+#    plts = {}
+#    plts['C02'] = {'cmap':'Greys_r','vmn':0.0,'vmx':1.0,'title':'Channel 2 Visible'}
+#    plts['C03'] = {'cmap':'Greys_r','vmn':0.0,'vmx':1.0,'title':'Channel 3 Near IR'}
+#    plts['C08'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 8 W/V'}
+#    plts['C09'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 9 W/V'}
+#    plts['C10'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 10 W/V'}
+#    plts['C13'] = {'cmap':ir_cmap,'vmn':-110.0,'vmx':56.0,'title':'Channel 13 IR'}
+#    plts['Ref'] = {'cmap':ref_cmap,'vmn':-30,'vmx':80,'title':'Reflectivity','cbticks':[0,15,30,50,60],'cblabel':'dBZ'}
     
     test = ['C02','Ref','C13', 'C08','C09','C10']
     test = ['C02','Ref','C13', 'GLM','ltg_low','ltg_high']
@@ -265,16 +260,18 @@ for fn in range(0,len(file_sequence)):
     # Don't need to reproject radar data - already got lon/lats from 'latlon_from_radar' function
     arDict['Ref'] = {'ar': ra_filled, 'lat':rlats, 'lon':rlons}
     
-
-
     for y,a in zip(test,axes.ravel()):
         a.set_extent(extent, crs=ccrs.PlateCarree())
+        for sh in shape_mini:
+            a.add_feature(shape_mini[sh], facecolor='none', edgecolor='gray')
+            a.tick_params(axis='both', labelsize=8)
+
         a.set_aspect(1.25)
         if str(y) != 'ltg_low' and str(y) != 'ltg_high' and str(y) != 'GLM':
             lon = arDict[y]['lon']
             lat = arDict[y]['lat']
             arr = arDict[y]['ar']
-        a.add_feature(COUNTIES_ST, facecolor='none', edgecolor='gray')
+
 
         if str(y) == 'Ref':
             cs = a.pcolormesh(lat,lon,arr,cmap=plts[y]['cmap'],vmin=plts[y]['vmn'], vmax=plts[y]['vmx'])
