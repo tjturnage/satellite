@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Jun 15 10:21:20 2019
-
 @author: tjtur
-
 """
 
 def ltg_plot(highlow,ltg):
@@ -57,36 +55,46 @@ def ltg_plot(highlow,ltg):
             a.set_title('EN Intracloud')
     return
 
-import sys
-sys.path.append('C:/data/scripts/resources')
-from my_functions import latlon_from_radar, figure_timestamp
-from custom_cmaps import plts
-from gis_layers import shape_mini
+
 from case_data import this_case
-
-import numpy as np
-from pyproj import Proj
-import xarray as xr
-import cartopy.crs as ccrs
-import matplotlib.pyplot as plt
-import os
-import pandas as pd
-from datetime import datetime
-
-base_dir = 'C:/data'
 event_date = this_case['date']
 rda = this_case['rda']
 extent = this_case['sat_extent']
 shapelist = this_case['shapelist']
 
+import sys
+import os
+
+try:
+    os.listdir('/var/www')
+    windows = False
+    sys.path.append('/data/scripts/resources')
+    image_dir = os.path.join('/var/www/html/radar','images')
+except:
+    windows = True
+    sys.path.append('C:/data/scripts/resources')
+    base_dir = 'C:/data'
+    base_gis_dir = 'C:/data/GIS'
+    image_dir = os.path.join(base_dir,event_date,'satellite')
 
 case_dir = os.path.join(base_dir,event_date)
 radar_dir = os.path.join(case_dir,rda,'netcdf/ReflectivityQC/00.50')
 sat_dir = os.path.join(case_dir,'satellite/raw')
 ltg_dir = os.path.join(case_dir,'lightning')
-image_dir = os.path.join(case_dir,'images')
-base_gis_dir = 'C:/data/GIS'
 
+
+from my_functions import latlon_from_radar, figure_timestamp
+from custom_cmaps import plts
+from gis_layers import shape_mini
+import numpy as np
+from pyproj import Proj
+import xarray as xr
+import cartopy.crs as ccrs
+import matplotlib.pyplot as plt
+import re
+import os
+import pandas as pd
+from datetime import datetime
 
 ltg_D = []
 # lightning files obtained from EarthNetworks
@@ -98,7 +106,7 @@ ltg_D.index = [datetime.strptime(x[:-2], '%Y-%m-%dT%H:%M:%S.%f') for x in ltg_D.
 # Here is a step where we define to bin plots by time
 # ----------------------------------------------------------------
 # ----------------------------------------------------------------
-idx = pd.date_range('2019-06-01 22:12', periods=45, freq='1Min')
+idx = pd.date_range('2019-03-14 22:30', periods=45, freq='1Min')
 dt = idx[1] - idx[0]
 # ----------------------------------------------------------------
 # ----------------------------------------------------------------
@@ -124,8 +132,11 @@ for s in (satellite_files):
     dtype = sat_split[1][:3]
     if dtype == 'GLM':
         g16_dtype = 'g'
+    elif re.search('C02', sat_split[1]):
+        g16_dtype = 'vis'
     else:
-        g16_dtype = 's'        
+        g16_dtype = 's'
+
     sat_time_s = sat_split[3]
     sat_time = sat_time_s[1:-1]
     sat_datetime = datetime.strptime(sat_time, "%Y%j%H%M%S")
@@ -195,10 +206,11 @@ for fn in range(0,len(file_sequence)):
 
     # process satellite file
     C = xr.open_dataset(sat_file)
-    gamma = 2.0
+    gamma = 2.2
     
     C02 = C['CMI_C02'].data
     C02 = np.power(C02, 1/gamma)
+    C02 = C02 * 1.2
     #C03 = C['CMI_C03'].data
     #C03 = np.power(C03, 1/gamma)
     
@@ -275,7 +287,8 @@ for fn in range(0,len(file_sequence)):
 
         if str(y) == 'Ref':
             cs = a.pcolormesh(lat,lon,arr,cmap=plts[y]['cmap'],vmin=plts[y]['vmn'], vmax=plts[y]['vmx'])
-            a.set_title('Radar')
+            a.set_title(plts[y]['title'])
+            #a.set_title('Radar')
 
         elif str(y) == 'ltg_low':
             if len(ltg) > 0:
@@ -290,20 +303,16 @@ for fn in range(0,len(file_sequence)):
         elif str(y) == 'GLM':
             try:
                 a.scatter(G['flash_lon'], G['flash_lat'], marker='_')
-                a.set_title('GLM')
+                a.set_title(plts[y]['title'])
+                
             except:
                 pass
         else:
             a.pcolormesh(lon,lat,arr,cmap=plts[y]['cmap'],vmin=plts[y]['vmn'],vmax=plts[y]['vmx'])
-            if str(y) == 'C02':
-                a.set_title('Visible Satellite')
-            elif str(y) == 'C13':
-                a.set_title('Infrared Satellite')
-            else:
-                pass
+            a.set_title(plts[y]['title'])
+                
     image_dst_path = os.path.join(image_dir,fig_fname_tstr + '.png')
     plt.savefig(image_dst_path,format='png')
 
     plt.show()
     plt.close()
-
