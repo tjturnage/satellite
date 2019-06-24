@@ -75,7 +75,7 @@ except:
     sys.path.append('C:/data/scripts/resources')
     base_dir = 'C:/data'
     base_gis_dir = 'C:/data/GIS'
-    image_dir = os.path.join(base_dir,event_date,'satellite')
+    image_dir = os.path.join(base_dir,'images',event_date,'satellite')
 
 case_dir = os.path.join(base_dir,event_date)
 radar_dir = os.path.join(case_dir,rda,'netcdf/ReflectivityQC/00.50')
@@ -83,7 +83,7 @@ sat_dir = os.path.join(case_dir,'satellite/raw')
 ltg_dir = os.path.join(case_dir,'lightning')
 
 
-from my_functions import latlon_from_radar, figure_timestamp
+from my_functions import latlon_from_radar, figure_timestamp, build_html
 from custom_cmaps import plts
 from gis_layers import shape_mini
 import numpy as np
@@ -219,15 +219,7 @@ for fn in range(0,len(file_sequence)):
     #C10 = C['CMI_C10'].data - 273.15
     C13 = C['CMI_C13'].data - 273.15
 
-#    plts = {}
-#    plts['C02'] = {'cmap':'Greys_r','vmn':0.0,'vmx':1.0,'title':'Channel 2 Visible'}
-#    plts['C03'] = {'cmap':'Greys_r','vmn':0.0,'vmx':1.0,'title':'Channel 3 Near IR'}
-#    plts['C08'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 8 W/V'}
-#    plts['C09'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 9 W/V'}
-#    plts['C10'] = {'cmap':wv_cmap,'vmn':-109.0,'vmx':0.0,'title':'Channel 10 W/V'}
-#    plts['C13'] = {'cmap':ir_cmap,'vmn':-110.0,'vmx':56.0,'title':'Channel 13 IR'}
-#    plts['Ref'] = {'cmap':ref_cmap,'vmn':-30,'vmx':80,'title':'Reflectivity','cbticks':[0,15,30,50,60],'cblabel':'dBZ'}
-    
+
     test = ['C02','Ref','C13', 'C08','C09','C10']
     test = ['C02','Ref','C13', 'GLM','ltg_low','ltg_high']
     #test = ['C08','C13']
@@ -316,3 +308,8 @@ for fn in range(0,len(file_sequence)):
 
     plt.show()
     plt.close()
+
+try:
+    build_html(image_dir)
+except:
+    pass
