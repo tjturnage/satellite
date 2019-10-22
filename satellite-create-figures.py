@@ -115,7 +115,7 @@ met_info = []
 
 
 
-products = ['C08','C13','ltg_high','Ref']
+products = ['C08', 'C09', 'C10', 'C13','ltg_high','Ref']
 width, height, rows, cols = define_mosaic_size(products)
 
     
@@ -227,25 +227,7 @@ for fn in range(0,len(file_sequence)):
     # process satellite file
     C = xr.open_dataset(sat_file)
     
-    gamma = 1.9
 
-    # test for existence of stand-alone full res visible file
-    try:
-        C02i = VV['Rad'].data
-        C02i = C02i/C02i.max()
-        C02i = np.power(C02i, 1/gamma)
-    except:
-        pass
-        
-    C02 = C['CMI_C02'].data
-    C02 = np.power(C02, 1/gamma)
-    C08 = C['CMI_C08'].data - 273.15
-    C09 = C['CMI_C09'].data - 273.15
-    #C10 = C['CMI_C10'].data - 273.15
-    C13 = C['CMI_C13'].data - 273.15
-
-
-    # Now that all data arrays are created, we will begin plotting.
     # First, determine satellite projection
 
     sat_lon = C['goes_imager_projection'].longitude_of_projection_origin
@@ -266,22 +248,39 @@ for fn in range(0,len(file_sequence)):
     XX, YY = np.meshgrid(x, y)
     lons, lats = p(XX, YY, inverse=True)
 
-    arDict['C02'] = {'ar': C02, 'lat':lats, 'lon':lons}
 
-    try:
-        x_vis = VV['x'][:] * sat_h
-        y_vis = VV['y'][:] * sat_h
-        XX_vis, YY_vis = np.meshgrid(x_vis, y_vis)
-        vlons, vlats = p(XX_vis, YY_vis, inverse=True)
-        arDict['C02i'] = {'ar': C02i, 'lat':vlats, 'lon':vlons} 
-    except:
-        pass
+    # Create data arrays are created for items in products
 
-    #arDict['C03'] = {'ar': C03, 'lat':lats, 'lon':lons}
-    arDict['C08'] = {'ar': C08, 'lat':lats, 'lon':lons}
-    arDict['C09'] = {'ar': C09, 'lat':lats, 'lon':lons}
-    #arDict['C10'] = {'ar': C10, 'lat':lats, 'lon':lons}
-    arDict['C13'] = {'ar': C13, 'lat':lats, 'lon':lons}
+    if 'C02' in products:
+        gamma = 1.9
+        C02 = C['CMI_C02'].data - 273.15
+        C02 = np.power(C02, 1/gamma)
+        arDict['C02'] = {'ar': C02, 'lat':lats, 'lon':lons}
+    if 'C08' in products:
+        C08 = C['CMI_C08'].data - 273.15
+        arDict['C08'] = {'ar': C08, 'lat':lats, 'lon':lons}
+    if 'C09' in products:
+        C09 = C['CMI_C09'].data - 273.15
+        arDict['C09'] = {'ar': C09, 'lat':lats, 'lon':lons}
+    if 'C10' in products:
+        C10 = C['CMI_C10'].data - 273.15
+        arDict['C10'] = {'ar': C10, 'lat':lats, 'lon':lons}
+    if 'C13' in products:
+        C13 = C['CMI_C13'].data - 273.15
+        arDict['C13'] = {'ar': C13, 'lat':lats, 'lon':lons}
+
+    # test for existence of stand-alone full res visible file
+    if 'C02i' in products:
+        try:
+            x_vis = VV['x'][:] * sat_h
+            y_vis = VV['y'][:] * sat_h
+            XX_vis, YY_vis = np.meshgrid(x_vis, y_vis)
+            vlons, vlats = p(XX_vis, YY_vis, inverse=True)
+            arDict['C02i'] = {'ar': C02i, 'lat':vlats, 'lon':vlons} 
+        except:
+            pass
+
+
     # Don't need to reproject radar data - already got lon/lats from 'latlon_from_radar' function
 
     # Now perform cartographic transformation for satellite data.
